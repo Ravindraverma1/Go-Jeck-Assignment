@@ -1,0 +1,63 @@
+---
+  - hosts: all
+    become: true
+    gather_facts: no
+    tasks:
+      - name: Set Master Instance Name
+        command: echo "nodename=master" >> /etc/environment
+        when: inventory_hostname == "master"
+
+      - name: Set Node1 Instance Name
+        command: echo "nodename=node1" >> /etc/environment
+        when: inventory_hostname == "node1"
+
+      - name: Set Node Instance Name
+        command: echo "nodename=node2" >> /etc/environment
+        when: inventory_hostname == "node2"
+
+      - name: Update packages
+        apt:
+          upgrade: dist
+ 
+      - name: Installing Java
+        apt:
+          name: openjdk-11-jre-headless
+          state: latest
+          install_recommends: no 
+          
+      - name: Adding JAVA_HOME to /etc/environment
+        lineinfile: dest=/etc/environment line='JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64' insertafter='EOF'
+      
+      - name: Install Additional Package
+        apt:
+          name: apt-transport-https
+          state: latest
+
+      - name: Import GPC certificate
+        shell: 'wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -'
+
+      - name: Add elasticsearch repo
+        shell: 'add-apt-repository "deb https://artifacts.elastic.co/packages/7.x/apt stable main"'
+
+      - name: Install elasticsearch
+        apt:
+          name: elasticsearch
+          state: latest
+
+      - name: Modify Minimum Java Heap
+        lineinfile: dest=/etc/elasticsearch/jvm.options line='-Xms300m' regexp='-Xms1g'
+      
+      - name: Modify Maximum Java Heap
+        lineinfile: dest=/etc/elasticsearch/jvm.options line='-Xmx300m' regexp='-Xmx1g'
+
+      - name: Install Discovery Plugin
+        command: /usr/share/elasticsearch/bin/elasticsearch-plugin install -b discovery-ec2
+
+      - name: Configure elasticsearch.yml
+        script: configuration-file.sh
+
+      - name: Start and Enable Elasticsearch service
+        service:
+          name: elasticsearch
+          enabled: yes
+          state: started
